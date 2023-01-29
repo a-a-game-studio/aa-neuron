@@ -23,10 +23,12 @@ enum ActionT {
 
 /** Действия с ботом */
 enum WordCatT {
-    entity= 1,
-    action = 2,
-    prop = 3
+    entity= 1, // Сущьность - существительное
+    action = 2, // Действие - глагол
+    prop = 3, // Свойство - прилагательное
+    alias = 4 // Псевдоним - местоимение
 }
+
 
 
 /** Попросить ввести */
@@ -106,20 +108,29 @@ async function faIndexation(){
     }
 }
 
-async function faIndexationDict(){
-    // let sHtml:string = await faReadFile(sRootDir + '/data/dict/slovar_glag.txt')
-    let sHtml:string = await faReadFile(sRootDir + '/data/dict/slovar_sush.txt')
+/** Индексация словаря */
+async function faIndexationDict(tWordCat:WordCatT){
+    let sDictOrigin:string = '';
+    if(tWordCat == WordCatT.entity){
+        sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_sush.txt')
+    } else if(tWordCat == WordCatT.action){
+        sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_glag.txt')
+    } else if(tWordCat == WordCatT.prop){
+        sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_prilag.txt')
+    } else if(tWordCat == WordCatT.alias){
+        sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_mestoim.txt')
+    } else {
+        console.log('Не поняла какой словарь нужно индексировать')
+        return;
+    }
 
     iCount = (await db('word').max({cnt:'id'}))[0].cnt;
 
-    const aDictSection = sHtml.split('=====').map(el => el.trim())
+    // const aDictSection = sDictOrigin.split('=====').map(el => el.trim())
 
-    const aWord:string[] = []
-    for (let i = 0; i < aDictSection.length; i++) {
-        const sDictSection = aDictSection[i].trim();
+    const aWord:string[] = sDictOrigin.split(/\n\n/).map(el => el.trim());
 
-        aWord.push(...sDictSection.split(/\n\n/).map(el => el.trim()));
-    }
+    // aWord.push(...sDictSection.split(/\n\n/).map(el => el.trim()));
 
     const aWordInsert:{
         id:number,
@@ -136,7 +147,7 @@ async function faIndexationDict(){
         aWordInsert.push({
             id: ++iCount,
             word:sWordClean,
-            cat:1,
+            cat:tWordCat,
             desc:sDescClean
         })
     }
@@ -203,10 +214,15 @@ async function faCategorization(){
 
 async function run(){
 
-    await faIndexationDict();
-    console.log('Индексация:' , ActionT.indexation)
-    console.log('Связи:', ActionT.relation)
-    console.log('категоризация:', ActionT.catagoryzation)
+    await faIndexationDict(WordCatT.action);
+    await faIndexationDict(WordCatT.entity);
+    await faIndexationDict(WordCatT.alias);
+    await faIndexationDict(WordCatT.prop);
+
+
+    // console.log('Индексация:' , ActionT.indexation)
+    // console.log('Связи:', ActionT.relation)
+    // console.log('категоризация:', ActionT.catagoryzation)
     // const ans = await askQuestion(`Выберите действие?:`);
 
     // console.log('Вы ввели:',ans)
