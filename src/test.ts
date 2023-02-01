@@ -29,6 +29,14 @@ enum WordCatT {
     alias = 4 // Псевдоним - местоимение
 }
 
+interface WordI{
+    id:number;
+    word:string;
+    q:number;
+    cat:WordCatT;
+    desc:string;
+}
+
 
 
 /** Попросить ввести */
@@ -81,30 +89,76 @@ async function faIndexation(){
         i = iRight+iRightSize;
     }
 
+    let asTextNew:string[] = [];
     for (let i = 0; i < asText.length; i++) {
         const sText = asText[i];
+
+        const asTextSplit = sText.split('.');
+
         
-        const asTextClear = sText.match(/([а-яёa-z0-9]{1,50})/gi);
 
-        const aInsertWord = [];
-        for (let j = 0; j < asTextClear.length; j++) {
-            const sTextClear = asTextClear[j];
+        for (let i = 0; i < asTextSplit.length; i++) {
+            const sTextSplit = asTextSplit[i].toLowerCase();
+            let asWordRead = sTextSplit.match(/([а-яёa-z0-9]{1,50})/gi) || [];
 
-            if(!ixWord[sTextClear]){
-                const iNewWord = ++iCount
-                ixWord[sTextClear] = iNewWord;
-                aInsertWord.push({
-                    id:iNewWord,
-                    word:sTextClear
-                })
+            const aWordDB:WordI[] = await db('word').whereIn('word', asWordRead).select();
+
+            const ixWordDb = _.keyBy(aWordDB, 'word');
+
+            for (let j = 0; j < asWordRead.length; j++) {
+                const vWordRead = ixWordDb[asWordRead[j]];
+                let vWordReadNext = null;
+                if(j + 1 < asWordRead.length){
+                    vWordReadNext = ixWordDb[asWordRead[j+1]];
+                }
+                
+                if(vWordRead && vWordReadNext){
+
+                    // console.log(vWordRead.word, vWordReadNext.word)
+
+                    const iCntWord = (await db('rel').where('word_id', vWordRead.id).where('word_rel_id', vWordReadNext.id).count({cnt:'*'}))[0].cnt;
+
+                    if(!iCntWord){
+                        console.log(vWordRead.word, vWordReadNext.word, iCntWord)
+                        const idNewRel = await db('rel').insert({word_id: vWordRead.id, word_rel_id: vWordReadNext.id});
+                    }
+                    
+                }
             }
+
+            // console.log(aWordDB.map(el => el.word.toLowerCase()));
+
+            asTextNew.push(..._.difference(asWordRead, aWordDB.map(el => el.word.toLowerCase())));
+
+            console.log(_.difference(asWordRead, aWordDB.map(el => el.word.toLowerCase())));
         }
 
-        if(aInsertWord.length){
-            console.log(aInsertWord.map(el => el.word));
-            await db('word').insert(aInsertWord);
-        }
         
+        
+    }
+
+    
+
+
+    asTextNew = _.uniq(asTextNew);
+
+    const aInsertWord = [];
+    for (let j = 0; j < asTextNew.length; j++) {
+        const sTextClear = asTextNew[j];
+
+        if(!ixWord[sTextClear]){
+            const iNewWord = ++iCount
+            ixWord[sTextClear] = iNewWord;
+            aInsertWord.push({
+                id:iNewWord,
+                word:sTextClear
+            })
+        }
+    }
+
+    if(aInsertWord.length){
+        console.log(aInsertWord.map(el => el.word));
+        await db('word').insert(aInsertWord).onConflict().ignore();
     }
 }
 
@@ -214,10 +268,12 @@ async function faCategorization(){
 
 async function run(){
 
-    await faIndexationDict(WordCatT.action);
-    await faIndexationDict(WordCatT.entity);
-    await faIndexationDict(WordCatT.alias);
-    await faIndexationDict(WordCatT.prop);
+    // await faIndexationDict(WordCatT.action);
+    // await faIndexationDict(WordCatT.entity);
+    // await faIndexationDict(WordCatT.alias);
+    // await faIndexationDict(WordCatT.prop);
+
+    await faIndexation()
 
 
     // console.log('Индексация:' , ActionT.indexation)
