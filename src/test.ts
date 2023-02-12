@@ -377,19 +377,158 @@ async function fSearchMakeWord(vWordQuestion:{word:string,id:number}){
 
 }
 
+async function fGetTextFromWeb(sUrl:string){
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+
+    console.log('URL>>>',sUrl)
+    await page.goto(sUrl, {waitUntil: 'domcontentloaded'});
+
+    const sTextPage = await page.evaluate(() => document.querySelector('body').innerText);
+
+    browser.close();
+
+    return sTextPage.toLowerCase();
+}
+
+function  fFindStart(sText:string, asMatch:string[]): number{
+
+    // console.log('_____________________________________')
+// 
+
+
+    let iLeft = 0;
+    let iStart = 0;
+    let iEnd = 0;
+    let iMatchCount = 0;
+
+        
+    for (let i = 0; i < asMatch.length; i++) {
+        const sMatch = asMatch[i].toLowerCase();
+        
+        
+        iLeft = sText.indexOf(sMatch, iLeft)
+
+        if(i == 0){
+
+            iEnd = sText.indexOf('\n', iLeft)
+        }
+
+        if(iLeft >=0 ){
+            if(iLeft > iEnd){
+                i = -1;
+                
+            }
+        } else {
+            iLeft = -1;
+        }
+
+        iLeft+=sMatch.length
+
+        const sDesc = sText.substring(iLeft, iEnd).toLowerCase();
+    // console.log('|||',sMatch,'|||',sDesc,'|||')
+    // console.log('start-pos>>>',i,iLeft, iEnd, sText.length)
+
+        
+    }
+    
+    // iEnd = sText.indexOf("\n", iLeft)
+    // const sDesc = sText.substring(iLeft, iEnd).toLowerCase();
+    // console.log('|||',sDesc)
+    // console.log('start-pos>>>',iLeft, iEnd, sText.length)
+
+    // console.log('===================================')
+
+    return iLeft;
+}
+
+
+async function fSearchSinonim_Synonim(vWordQuestion:{word:string,id:number}){
+
+    const sTextPage = await fGetTextFromWeb('https://sinonim.org/s/'+vWordQuestion.word)
+
+    // console.log('text-page>>>', sTextPage);
+
+    const iLeftPos = fFindStart(sTextPage, ['Синоним', 'начальная форма', 'Частота']);
+
+    const iEndPos = fFindStart(sTextPage, ['Не нашли нужный синоним?']);
+
+    const sDesc = sTextPage.substring(iLeftPos, iEndPos);
+
+    
+    const asDesc =  sDesc.split('\n');
+    // console.log(asDesc)
+    const asSinonim = [];
+    for (let i = 0; i < asDesc.length; i++) {
+        const sDescLine = asDesc[i];
+        // console.log('====>',sDescLine);
+        let asWordRead = sDescLine.match(/[0-9]{1,4}\t([а-яё]{1,50}).*\t([0-9.]{1,6})/i) || [];
+
+        if(asWordRead[1]){
+
+            if(Number(asWordRead[2]) > 10){
+            console.log(asWordRead[1], asWordRead[2]);
+            }
+
+            asSinonim.push(asWordRead[1])
+        }
+        // console.log(_.uniq(asWordRead)
+        
+    }
+
+    
+    return _.uniq(asSinonim).slice(0,5)
+
+}
+
+async function faSynonimization(){
+    const aWordQuestion = await db('word').where('if_sinonim', '=', 0).select().orderBy('q','desc').limit(10);
+
+    for (let i = 0; i < aWordQuestion.length; i++) {
+        const vWordQuestion = aWordQuestion[i];
+
+        console.log('_____________________________________')
+
+        console.log('Поиск синонима:', vWordQuestion.word);
+        // console.log('word>>>',vWordQuestion);
+
+        const asSinonim = await fSearchSinonim_Synonim(vWordQuestion);
+
+        console.log('Синонимы:', asSinonim)
+
+        for (let i = 0; i < asSinonim.length; i++) {
+            const sSinonim = asSinonim[i];
+            
+        
+            const idSinonimWord:number = (await db('word').where('word', '=', sSinonim).select('id'))[0]?.id || 0;
+            if(!idSinonimWord){
+                await db('word').insert({word:sSinonim,cat:0}).onConflict().merge('word')
+            } else {
+                const idSinonimRel:number = (await db('sinonim')
+                    .where('word_id', '=', vWordQuestion.id)
+                    .where('word_sinonim_id', '=', idSinonimWord)
+                    .select('id'))[0]?.id || 0;
+
+                if(!idSinonimRel){
+                    await db('sinonim').insert({word_id:vWordQuestion.id, word_sinonim_id:idSinonimWord}).onConflict().ignore()
+
+                }
+
+                
+            }
+        }
+
+        await db('word').where({id:vWordQuestion.id}).update({ if_sinonim:1}).onConflict().merge('word')
+
+        console.log('===================================')
+
+        await mWait(mRandomInteger(1, 3)*1000);
+
+    }
+}
 
 async function faCategorization(){
-    const aWordQuestion = await db('word').where('cat', '=', 0).select().orderBy('q','asc').limit(2);
-
-    const sLeftBlock = 'Быстрый ответ';
-    const sRightBlock = 'Результаты поиска';
-
-   
-    // const sLeftBlock = '<table>';
-    // const sRightBlock = '</table>';
-    
-    const iLeftSize = sLeftBlock.length;
-    const iRightSize = sRightBlock.length;
+    const aWordQuestion = await db('word').where('cat', '=', 0).select().orderBy('q','asc').limit(100);
 
 
     for (let i = 0; i < aWordQuestion.length; i++) {
@@ -460,6 +599,12 @@ async function faCategorization(){
                     console.log('Часть речи глагол:', sCategory)
                     tWordCat = WordCatT.action;
                     await db('word').where('id', '=', vWordQuestion.id).update({cat:WordCatT.action});
+                }
+
+                if(sDesc.indexOf('местои', iPosCategory) >= 0){
+                    console.log('Часть речи местоимение:', sCategory)
+                    tWordCat = WordCatT.action;
+                    await db('word').where('id', '=', vWordQuestion.id).update({cat:WordCatT.alias});
                 }
 
                 if(sDesc.indexOf('предлог', iPosCategory) >= 0){
@@ -539,12 +684,14 @@ async function faCategorization(){
         console.log(sDesc);
 
 
-        mWait(mRandomInteger(5, 10)*1000);
+        await mWait(mRandomInteger(1, 3)*1000);
 
         
     }
 
 }
+
+
 
 async function run(){
 
@@ -553,9 +700,11 @@ async function run(){
     // await faIndexationDict(WordCatT.alias);
     // await faIndexationDict(WordCatT.prop);
 
+    await faSynonimization();
+
     // await faIndexation()
 
-    await faCategorization();
+    // await faCategorization();
 
 
     // console.log('Индексация:' , ActionT.indexation)
