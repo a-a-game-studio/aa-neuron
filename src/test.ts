@@ -58,8 +58,18 @@ function askQuestion(query:string) {
     }))
 }
 
-async function faIndexation(){
-    let sHtml:string = (await axios.get('https://dictants.com/1-klass/diktanty-1-klass-1-chetvert/')).data
+async function faIndexation(sUrl:string){
+    // let sHtml:string = (await axios.get(sUrl)).data
+
+    let sHtml = await fGetTextFromWeb(sUrl)
+
+    // const iLeft = fFindStart(sHtml, ['контрольные и проверочные диктанты по русскому языку'])
+
+    // const sHtml = 'категория «диктанты»'
+
+    
+
+    // return;
 
     iCount = (await db('word').max({cnt:'id'}))[0].cnt;
 
@@ -75,24 +85,37 @@ async function faIndexation(){
 
     const asText = [];
 
-    // sHtml = sHtml.split('<div class="text">').join('_s__');
-    // sHtml = sHtml.split('<span class="dictant').join('__s_');
+    sHtml = sHtml.split('категория «диктанты»').join('_s__');
+    sHtml = sHtml.split('\nдиктанты').join('__s_');
 
-    const iLeftSize = '<div class="text">'.length;
-    const iRightSize = '<span class="dictant'.length;
+    console.log(sHtml);
+
+    
+
+
+    const iLeftSize = '_s__'.length;
+    const iRightSize = '__s_'.length;
     
     for (let i = 0; i < sHtml.length; i++) {
-        const iLeft = sHtml.indexOf('<div class="text">', i)
+        const iLeft = sHtml.indexOf('_s__', i)
         
         if(iLeft < 0){
             break;
         }
-        const iRight = sHtml.indexOf('<span class="dictant', iLeft)
+        const iRight = sHtml.indexOf('__s_', iLeft)
+
+        if(iRight < 0){
+            break;
+        }
 
         // console.log(iLeft+iLeftSize, iRight)
         asText.push(sHtml.substring(iLeft+iLeftSize, iRight))
 
+        // console.log(sHtml.substring(iLeft+iLeftSize, iRight));
+
         i = iRight+iRightSize;
+
+        process.stdout.write('.')
     }
 
     let asTextNew:string[] = [];
@@ -144,7 +167,134 @@ async function faIndexation(){
                 if(idPhraseStruct){
                     await db('phrase_struct').where('structure', sStructure).increment('cnt');
                 } else {
-                    await db('phrase_struct').where('structure', sStructure).insert({structure:sStructure, cnt:1});
+                    await db('phrase_struct').where('structure', sStructure).insert({structure:sStructure, cnt:1}).onConflict().ignore();
+                }
+            }
+
+            // console.log(aWordDB.map(el => el.word.toLowerCase()));
+
+            asTextNew.push(..._.difference(asWordRead, aWordDB.map(el => el.word.toLowerCase())));
+
+            // console.log(_.difference(asWordRead, aWordDB.map(el => el.word.toLowerCase())));
+        }
+
+        
+        
+    }
+
+    
+
+
+    asTextNew = _.uniq(asTextNew);
+
+    const aInsertWord = [];
+    for (let j = 0; j < asTextNew.length; j++) {
+        const sTextClear = asTextNew[j];
+
+        if(!ixWord[sTextClear]){
+            const iNewWord = ++iCount
+            ixWord[sTextClear] = iNewWord;
+            aInsertWord.push({
+                id:iNewWord,
+                word:sTextClear
+            })
+        }
+    }
+
+    if(aInsertWord.length){
+        console.log(aInsertWord.map(el => el.word));
+        await db('word').insert(aInsertWord).onConflict().ignore();
+    }
+}
+
+
+async function faIndexationLib(sFile:string){
+    // let sHtml:string = (await axios.get(sUrl)).data
+
+    // let sHtml = await fGetTextFromWeb(sUrl)
+
+    // const iLeft = fFindStart(sHtml, ['контрольные и проверочные диктанты по русскому языку'])
+
+    // const sHtml = 'категория «диктанты»'
+
+    const sText = await faReadFile(sFile);
+
+    // return;
+
+    iCount = (await db('word').max({cnt:'id'}))[0].cnt;
+
+    const aExistWord = await db('word').select();
+    for (let i = 0; i < aExistWord.length; i++) {
+        const vExistWord = aExistWord[i];
+        // console.log(vExistWord);
+        ixWord[vExistWord.word] = vExistWord.id;
+        
+    }
+
+    console.log( iCount);
+
+    // const asText = [];
+
+    const asText = sText.split('\n\n')
+
+    let cntRead = 0;
+
+    let asTextNew:string[] = [];
+    for (let c = 0; c < asText.length; c++) {
+        const sText = asText[c];
+
+        const asTextSplit = sText.split('.').filter(el =>  el.length > 1 )
+
+
+        for (let i = 0; i < asTextSplit.length; i++) {
+            const sTextSplit = asTextSplit[i].toLowerCase();
+            let asWordRead = sTextSplit.match(/([а-яёa-z0-9]{1,50})/gi) || [];
+
+            const aWordDB:WordI[] = await db('word').whereIn('word', asWordRead).select();
+
+            const ixWordDb = _.keyBy(aWordDB, 'word');
+
+            const aiStructPhrasa = [];
+            for (let j = 0; j < asWordRead.length; j++) {
+                const vWordReadDb = ixWordDb[asWordRead[j]];
+                let vWordReadNext = null;
+                if(j + 1 < asWordRead.length){
+                    vWordReadNext = ixWordDb[asWordRead[j+1]];
+                }
+
+                if(vWordReadDb && vWordReadDb.cat > 0){
+                    aiStructPhrasa.push(vWordReadDb.cat);
+                } else {
+                    aiStructPhrasa.push(0);
+                }
+
+                if(vWordReadDb && vWordReadNext){
+
+                    // console.log(vWordRead.word, vWordReadNext.word)
+
+                    const iCntWord = (await db('rel').where('word_id', vWordReadDb.id).where('word_rel_id', vWordReadNext.id).count({cnt:'*'}))[0].cnt;
+
+                    if(!iCntWord){
+                        console.log(vWordReadDb.word, vWordReadNext.word, iCntWord, ' - read:', c,i,j)
+                        const idNewRel = await db('rel').insert({word_id: vWordReadDb.id, word_rel_id: vWordReadNext.id});
+                    } else {
+                        process.stdout.write('.');
+                        cntRead++;
+                        if(cntRead % 1000 == 0){
+                            console.log('read:', cntRead, ':', 'it' , ':',c,'/',asText.length, ':',i,j)
+                        }
+                    }
+                    
+                }
+            }
+
+            if(aiStructPhrasa.length){
+                const sStructure = aiStructPhrasa.join('-')
+                const idPhraseStruct = (await db('phrase_struct').where('structure', sStructure).select('id'))[0]?.id || 0;
+                if(idPhraseStruct){
+                    await db('phrase_struct').where('structure', sStructure).increment('cnt');
+                } else {
+                    await db('phrase_struct').where('structure', sStructure).insert({structure:sStructure, cnt:1}).onConflict().ignore();
                 }
             }
 
@@ -692,6 +842,119 @@ async function faCategorization(){
 }
 
 
+const aConfDict = [
+    'https://dictants.com/1-klass/diktanty-1-klass-1-chetvert/',
+    'https://dictants.com/1-klass/diktanty-1-klass-2-chetvert/',
+    'https://dictants.com/1-klass/diktanty-1-klass-3-chetvert/',
+    'https://dictants.com/1-klass/diktanty-1-klass-4-chetvert/',
+    'https://dictants.com/1-klass/itogovye-diktanty-za-1-klass/',
+
+    'https://dictants.com/2-klass/diktanty-2-klass-1-chetvert/',
+    'https://dictants.com/2-klass/diktanty-2-klass-2-chetvert/',
+    'https://dictants.com/2-klass/diktanty-2-klass-3-chetvert/',
+    'https://dictants.com/2-klass/diktanty-2-klass-4-chetvert/',
+    'https://dictants.com/2-klass/itogovye-diktanty-za-2-klass/',
+
+    'https://dictants.com/3-klass/diktanty-3-klass-1-chetvert/',
+    'https://dictants.com/3-klass/diktanty-3-klass-2-chetvert/',
+    'https://dictants.com/3-klass/diktanty-3-klass-3-chetvert/',
+    'https://dictants.com/3-klass/diktanty-3-klass-4-chetvert/',
+    'https://dictants.com/3-klass/itogovye-diktanty-za-3-klass/',
+
+    'https://dictants.com/4-klass/diktanty-4-klass-1-chetvert/',
+    'https://dictants.com/4-klass/diktanty-4-klass-2-chetvert/',
+    'https://dictants.com/4-klass/diktanty-4-klass-3-chetvert/',
+    'https://dictants.com/4-klass/diktanty-4-klass-4-chetvert/',
+    'https://dictants.com/4-klass/itogovye-diktanty-za-4-klass/',
+
+    'https://dictants.com/5-klass/diktanty-5-klass-1-chetvert/',
+    'https://dictants.com/5-klass/diktanty-5-klass-2-chetvert/',
+    'https://dictants.com/5-klass/diktanty-5-klass-3-chetvert/',
+    'https://dictants.com/5-klass/diktanty-5-klass-4-chetvert/',
+    'https://dictants.com/5-klass/itogovye-diktanty-za-5-klass/',
+
+    'https://dictants.com/6-klass/diktanty-6-klass-1-chetvert/',
+    'https://dictants.com/6-klass/diktanty-6-klass-2-chetvert/',
+    'https://dictants.com/6-klass/diktanty-6-klass-3-chetvert/',
+    'https://dictants.com/6-klass/diktanty-6-klass-4-chetvert/',
+    'https://dictants.com/6-klass/itogovye-diktanty-za-6-klass/',
+]
+
+async function fGenPhrase(asWord:string[], lenSearch:number){
+    const aWordQuery = await db('word').whereIn('word', asWord).select();
+
+    if(!aWordQuery.length){
+        return;
+    }
+
+    const ixWordFindRel:Record<number, number[]> = {};
+    
+    let aidWordRelSearch = aWordQuery.map(el => el.id);
+    for (let i = 0; i < lenSearch; i++) {
+        
+
+        const aRel = await db('rel').whereIn('word_id', aidWordRelSearch).select('word_id', 'word_rel_id');
+        // console.log('ixWordFindRel:',Object.keys(ixWordFindRel))
+        aidWordRelSearch = aRel.map(el => el.word_rel_id);
+
+        for (let j = 0; j < aRel.length; j++) {
+            const vRel = aRel[j];
+
+            if(!ixWordFindRel[vRel.word_id]){
+                ixWordFindRel[vRel.word_id] = [];
+            } 
+
+            ixWordFindRel[vRel.word_id].push(vRel.word_rel_id);
+            
+        }
+
+    }
+
+    
+
+
+    // const asWordWuery = aWordQuery.map(el => el.word);
+    const ixWordQuery = _.keyBy(aWordQuery, 'id');
+    const ixWordQueryText = _.keyBy(aWordQuery, 'word');
+    const sWordFirst = asWord[0]
+    let idWordFind = ixWordQueryText[asWord[0]].id
+    const aidWordPhrase = [idWordFind];
+    for (let i = 0; i < lenSearch; i++) {
+
+
+        const aidRel = ixWordFindRel[idWordFind];
+
+        if(aidRel){
+            const iRelPos = mRandomInteger(0, aidRel.length - 1);
+
+            idWordFind = aidRel[iRelPos];
+
+            aidWordPhrase.push(idWordFind);
+        } else {
+            
+            console.log('Не найдено')
+            break;
+        }
+    }
+
+    // console.log('aidWordPhrase',aidWordPhrase);
+
+    const aWordPhrase = await db('word').whereIn('id', aidWordPhrase).select();
+    const ixWordPhrase = _.keyBy(aWordPhrase, 'id');
+
+    // console.log(ixWordPhrase);
+    const asOut = [];
+    for (let i = 0; i < aidWordPhrase.length; i++) {
+        const idWordPhrase = aidWordPhrase[i];
+        const sWord = ixWordPhrase[idWordPhrase].word;
+        asOut.push(sWord);
+    }
+
+    console.log(asOut.join(' '))
+    
+    console.log('END')
+}
+
 
 async function run(){
 
@@ -700,9 +963,23 @@ async function run(){
     // await faIndexationDict(WordCatT.alias);
     // await faIndexationDict(WordCatT.prop);
 
-    await faSynonimization();
+    // await faSynonimization();
 
-    // await faIndexation()
+    // for (let i = 0; i < aConfDict.length; i++) {
+    //     const sURLDict = aConfDict[i];
+    //     console.log('===========================================')
+    //     console.log('=============faIndexation===============')
+    //     console.log(sURLDict)
+    //     console.log('===========================================')
+        // await faIndexation(sURLDict)
+    //     console.log('====================END=======================')
+    //     console.log('===========================================')
+    // }
+
+    // await faIndexationLib(sRootDir + '/data/lib/hary_potter.txt')
+
+    await fGenPhrase(['мяч','слизерин'], 10);
+    
 
     // await faCategorization();
 
