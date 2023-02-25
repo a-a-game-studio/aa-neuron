@@ -35,34 +35,44 @@ export class ReadSys {
         const asText = sText.split('\n\n')
     
         let cntRead = 0;
+        let idPrevContext = 0;
     
         let asTextNew:string[] = [];
         for (let c = 0; c < asText.length; c++) {
             const sText = asText[c];
-
-            // Добавляем контекст
-            const sContext = (sText.match(/([а-яёa-z0-9,.]{1,50})/gi) || []).join(' ').toLowerCase();
-            const sContextHash = md5(sContext);
-            
-
-            let vContext = null;
-            if(sContext.length > 0){
-                vContext = await db(ContextE.NAME).where('hash', sContextHash).first();
-            }
-            
-            if(!vContext && sContext.length){
-                console.log('>>>>',sContextHash, sContext)
-                const idContext = await db(ContextE.NAME).insert({
-                    hash: sContextHash,
-                    text: sContext
-                });
-            }
-
     
             const asTextSplit = sText.split('.').filter(el =>  el.length > 1 )
     
             for (let i = 0; i < asTextSplit.length; i++) {
                 const sTextSplit = asTextSplit[i].toLowerCase();
+                
+
+                // Добавляем контекст
+                const sContext = (sTextSplit.match(/([а-яёa-z0-9,]{1,50})/gi) || []).join(' ').toLowerCase();
+                const sContextHash = md5(sContext);
+                
+
+                let vContext = null;
+                if(sContext.length > 0){
+                    vContext = await db(ContextE.NAME).where('hash', sContextHash).first();
+                }
+                
+                if(!vContext && sContext.length){
+                    console.log('>>>>',sContextHash, sContext)
+                    const idContext = (await db(ContextE.NAME).insert({
+                        hash: sContextHash,
+                        text: sContext,
+                        prev_ctx_id:idPrevContext
+                    }).onConflict().ignore())[0];
+
+                    idPrevContext = idContext;
+                }
+
+                if(vContext){
+                    idPrevContext = vContext.id
+                }
+
+                // Разбор предложения
                 let asWordRead = sTextSplit.match(/([а-яёa-z0-9]{1,50})/gi) || [];
     
                 const aWordDB:WordI[] = await db(WordE.NAME).whereIn('word', asWordRead).select();
@@ -186,11 +196,17 @@ export class ReadSys {
             sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_prilag.txt')
         } else if(tWordCat == WordCatT.alias){
             sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_mestoim.txt')
+        } else if(tWordCat == WordCatT.adverb){
+            sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_narech.txt')
+        } else if(tWordCat == WordCatT.union){
+            sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_union.txt')
+        } else if(tWordCat == WordCatT.numeric){
+            sDictOrigin = await faReadFile(sRootDir + '/data/dict/slovar_chislit.txt')
         } else {
             console.log('Не поняла какой словарь нужно индексировать')
             return;
         }
-
+        
         let iCount = (await db('word').max({cnt:'id'}))[0].cnt;
 
         // const aDictSection = sDictOrigin.split('=====').map(el => el.trim())
@@ -200,7 +216,7 @@ export class ReadSys {
         // aWord.push(...sDictSection.split(/\n\n/).map(el => el.trim()));
 
         const aWordInsert:{
-            id:number,
+            id?:number,
             word:string,
             cat:WordCatT
             desc?:string
@@ -212,7 +228,6 @@ export class ReadSys {
             const sDescClean = sWord.substring(iDescPos).trim()
 
             aWordInsert.push({
-                id: ++iCount,
                 word:sWordClean,
                 cat:tWordCat,
                 desc:sDescClean
@@ -224,8 +239,8 @@ export class ReadSys {
             for (let i = 0; i < aaWordInsertChunk.length; i++) {
                 const aWordInsertChunk = aaWordInsertChunk[i];
 
-                // console.log(aWordInsertChunk);
-                await db('word').insert(aWordInsertChunk).onConflict().ignore();
+                console.log(aWordInsertChunk);
+                await db('word').insert(aWordInsertChunk).onConflict().merge();
             }
             
         }

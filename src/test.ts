@@ -811,10 +811,12 @@ async function run(){
     //     console.log('===========================================')
     // }
 
-    // const vReadSys = new ReadSys();
+    const vReadSys = new ReadSys();
     // await vReadSys.faReadLib(sRootDir + '/data/lib/hary_potter.txt')
 
-    await fGenPhrase(['я'], 10);
+    await vReadSys.faReadDict(WordCatT.numeric)
+
+    // await fGenPhrase(['я'], 10);
     
 
     // await faCategorization();

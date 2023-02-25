@@ -7,7 +7,9 @@ export enum WordCatT {
     prop = 3, // Свойство - прилагательное
     alias = 4, // Псевдоним - местоимение
     preposition = 5, // Предлог
-    adverb = 6 // Наречие
+    adverb = 6, // Наречие
+    union = 7, // Союзы
+    numeric = 8 // числительное
 }
 
 export interface WordI {
