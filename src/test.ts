@@ -11,6 +11,9 @@ import puppeteer from 'puppeteer';
 import { db } from "./System/DBConnect";
 import { mWait } from './Helper/WaitH';
 import { mRandomInteger } from './Helper/NumberH';
+import { ReadSys } from './System/ReadSys';
+import { WordCatT, WordI } from './Infrastructure/SQL/Entity/WordE';
+import { RelI } from './Infrastructure/SQL/Entity/RelE';
 
 let iCount = 0;
 const ixRelation:Record<number, number[]> = {}
@@ -691,24 +694,52 @@ async function fGenPhrase(asWord:string[], lenSearch:number){
 
     const ixWordFindRel:Record<number, number[]> = {};
     
-    let aidWordRelSearch = aWordQuery.map(el => el.id);
+    let aidWordNextSearch:number[] = aWordQuery.map(el => el.id);
+    let idWordSelect:number = 0;
+    const aidWordPhrase:number[] = [];
+    
     for (let i = 0; i < lenSearch; i++) {
         
-
-        const aRel = await db('rel').whereIn('word_id', aidWordRelSearch).select('word_id', 'word_rel_id');
-        // console.log('ixWordFindRel:',Object.keys(ixWordFindRel))
-        aidWordRelSearch = aRel.map(el => el.word_rel_id);
-
-        for (let j = 0; j < aRel.length; j++) {
-            const vRel = aRel[j];
-
-            if(!ixWordFindRel[vRel.word_id]){
-                ixWordFindRel[vRel.word_id] = [];
-            } 
-
-            ixWordFindRel[vRel.word_id].push(vRel.word_rel_id);
-            
+        
+        const dbQuery = db('rel').whereIn('word_id', aidWordNextSearch)
+        if(idWordSelect > 0){
+            dbQuery.where('prev_word_id', idWordSelect)
         }
+
+        const aRel:RelI[] = await dbQuery.select('prev_word_id','word_id', 'next_word_id');
+        // console.log('ixWordFindRel:',Object.keys(ixWordFindRel))
+        // 
+        const aidWordSelect = _.uniq(aRel.map(el => el.word_id));
+
+        // Подборка случайных значений
+        const iRelPos = mRandomInteger(0, aidWordSelect.length - 1);
+
+        idWordSelect = aidWordSelect[iRelPos] || 0
+
+        const ixWordNextSearch = _.groupBy(aRel,'word_id');
+
+        if(ixWordNextSearch[idWordSelect]?.length){
+            aidWordNextSearch = _.uniq(ixWordNextSearch[idWordSelect].map(el => el.next_word_id))
+        } else {
+            aidWordNextSearch = _.uniq(aRel.map(el => el.next_word_id));
+            console.log('НЕНЕШЕЛ КОРРЕКТНЫЕ СВЯЗИ')
+        }
+
+        if(idWordSelect){
+            aidWordPhrase.push(idWordSelect);
+        }
+        
+
+        // for (let j = 0; j < aRel.length; j++) {
+        //     const vRel = aRel[j];
+
+        //     if(!ixWordFindRel[vRel.word_id]){
+        //         ixWordFindRel[vRel.word_id] = [];
+        //     } 
+
+        //     ixWordFindRel[vRel.word_id].push(vRel.next_word_id);
+            
+        // }
 
     }
 
@@ -716,33 +747,35 @@ async function fGenPhrase(asWord:string[], lenSearch:number){
 
 
     // const asWordWuery = aWordQuery.map(el => el.word);
-    const ixWordQuery = _.keyBy(aWordQuery, 'id');
-    const ixWordQueryText = _.keyBy(aWordQuery, 'word');
-    const sWordFirst = asWord[0]
-    let idWordFind = ixWordQueryText[asWord[0]].id
-    const aidWordPhrase = [idWordFind];
-    for (let i = 0; i < lenSearch; i++) {
+    // const ixWordQuery = _.keyBy(aWordQuery, 'id');
+    // const ixWordQueryText = _.keyBy(aWordQuery, 'word');
+    // const sWordFirst = asWord[0]
+    // let idWordFind = ixWordQueryText[asWord[0]].id
+    // const aidWordPhrase = [idWordFind];
+    // for (let i = 0; i < lenSearch; i++) {
 
 
-        const aidRel = ixWordFindRel[idWordFind];
+    //     const aidRel = ixWordFindRel[idWordFind];
 
-        if(aidRel){
-            const iRelPos = mRandomInteger(0, aidRel.length - 1);
+    //     if(aidRel){
+    //         const iRelPos = mRandomInteger(0, aidRel.length - 1);
 
-            idWordFind = aidRel[iRelPos];
+    //         idWordFind = aidRel[iRelPos];
 
-            aidWordPhrase.push(idWordFind);
-        } else {
+    //         aidWordPhrase.push(idWordFind);
+    //     } else {
             
-            console.log('Не найдено')
-            break;
-        }
-    }
+    //         console.log('Не найдено')
+    //         break;
+    //     }
+    // }
 
-    // console.log('aidWordPhrase',aidWordPhrase);
+    console.log('aidWordPhrase',aidWordPhrase);
 
     const aWordPhrase = await db('word').whereIn('id', aidWordPhrase).select();
     const ixWordPhrase = _.keyBy(aWordPhrase, 'id');
+
+    // console.log(aidWordPhrase, ixWordPhrase)
 
     // console.log(ixWordPhrase);
     const asOut = [];
@@ -752,7 +785,7 @@ async function fGenPhrase(asWord:string[], lenSearch:number){
         asOut.push(sWord);
     }
 
-    console.log(asOut.join(' '))
+    console.log('>>>',asOut.join(' '))
     
     console.log('END')
 }
@@ -778,9 +811,10 @@ async function run(){
     //     console.log('===========================================')
     // }
 
-    // await faIndexationLib(sRootDir + '/data/lib/hary_potter.txt')
+    // const vReadSys = new ReadSys();
+    // await vReadSys.faReadLib(sRootDir + '/data/lib/hary_potter.txt')
 
-    await fGenPhrase(['тихо'], 5);
+    await fGenPhrase(['я'], 10);
     
 
     // await faCategorization();

@@ -1,6 +1,9 @@
 import _ from "lodash";
+import md5 from "md5";
 import { sRootDir } from "../app";
 import { faReadFile } from "../Helper/FileH";
+import { ContextE } from "../Infrastructure/SQL/Entity/ContextE";
+import { WordCatT, WordE, WordI } from "../Infrastructure/SQL/Entity/WordE";
 import { db } from "./DBConnect";
 
 
@@ -8,13 +11,6 @@ import { db } from "./DBConnect";
 export class ReadSys {
 
     public async faReadLib(sFile:string){
-        // let sHtml:string = (await axios.get(sUrl)).data
-    
-        // let sHtml = await fGetTextFromWeb(sUrl)
-    
-        // const iLeft = fFindStart(sHtml, ['контрольные и проверочные диктанты по русскому языку'])
-    
-        // const sHtml = 'категория «диктанты»'
 
         const ixWord:Record<string, number> = {};
     
@@ -22,9 +18,9 @@ export class ReadSys {
     
         // return;
     
-        let iCount = (await db('word').max({cnt:'id'}))[0].cnt;
+        let iCount = (await db(WordE.NAME).max({cnt:'id'}))[0].cnt;
     
-        const aExistWord = await db('word').select();
+        const aExistWord:WordI[] = await db(WordE.NAME).select();
         for (let i = 0; i < aExistWord.length; i++) {
             const vExistWord = aExistWord[i];
             // console.log(vExistWord);
@@ -43,15 +39,33 @@ export class ReadSys {
         let asTextNew:string[] = [];
         for (let c = 0; c < asText.length; c++) {
             const sText = asText[c];
+
+            // Добавляем контекст
+            const sContext = (sText.match(/([а-яёa-z0-9,.]{1,50})/gi) || []).join(' ').toLowerCase();
+            const sContextHash = md5(sContext);
+            
+
+            let vContext = null;
+            if(sContext.length > 0){
+                vContext = await db(ContextE.NAME).where('hash', sContextHash).first();
+            }
+            
+            if(!vContext && sContext.length){
+                console.log('>>>>',sContextHash, sContext)
+                const idContext = await db(ContextE.NAME).insert({
+                    hash: sContextHash,
+                    text: sContext
+                });
+            }
+
     
             const asTextSplit = sText.split('.').filter(el =>  el.length > 1 )
-    
     
             for (let i = 0; i < asTextSplit.length; i++) {
                 const sTextSplit = asTextSplit[i].toLowerCase();
                 let asWordRead = sTextSplit.match(/([а-яёa-z0-9]{1,50})/gi) || [];
     
-                const aWordDB:WordI[] = await db('word').whereIn('word', asWordRead).select();
+                const aWordDB:WordI[] = await db(WordE.NAME).whereIn('word', asWordRead).select();
     
                 const ixWordDb = _.keyBy(aWordDB, 'word');
     
@@ -59,8 +73,25 @@ export class ReadSys {
                 for (let j = 0; j < asWordRead.length; j++) {
                     const vWordReadDb = ixWordDb[asWordRead[j]];
                     let vWordReadNext = null;
+                    let idWordReadNext = 0;
+                    let vWordReadPrev = null;
+                    let idWordReadPrev = 0;
                     if(j + 1 < asWordRead.length){
                         vWordReadNext = ixWordDb[asWordRead[j+1]];
+                        if(vWordReadNext){ // Если запись нашли получаем ID
+                            idWordReadNext = vWordReadNext.id;
+                        } else {
+                            idWordReadNext = -1;
+                        }
+                    }
+
+                    if(j > 0){
+                        vWordReadPrev = ixWordDb[asWordRead[j-1]];
+                        if(vWordReadPrev){ // Если запись нашли получаем ID
+                            idWordReadPrev = vWordReadPrev.id;
+                        } else {
+                            idWordReadPrev = -1;
+                        }
                     }
     
                     if(vWordReadDb && vWordReadDb.cat > 0){
@@ -69,15 +100,23 @@ export class ReadSys {
                         aiStructPhrasa.push(0);
                     }
     
-                    if(vWordReadDb && vWordReadNext){
+                    if(vWordReadDb && idWordReadPrev >= 0 && idWordReadNext >= 0){
     
                         // console.log(vWordRead.word, vWordReadNext.word)
     
-                        const iCntWord = (await db('rel').where('word_id', vWordReadDb.id).where('word_rel_id', vWordReadNext.id).count({cnt:'*'}))[0].cnt;
+                        const iCntWord = (await db('rel')
+                            .where('prev_word_id', idWordReadPrev)
+                            .where('word_id', vWordReadDb.id)
+                            .where('next_word_id', idWordReadNext)
+                            .count({cnt:'*'}))[0].cnt;
     
                         if(!iCntWord){
-                            console.log(vWordReadDb.word, vWordReadNext.word, iCntWord, ' - read:', c,i,j)
-                            const idNewRel = await db('rel').insert({word_id: vWordReadDb.id, word_rel_id: vWordReadNext.id});
+                            console.log('[', vWordReadDb.word,'-',vWordReadPrev?.word || '','-', vWordReadNext?.word || '',']', iCntWord, ' - read:', c,i,j)
+                            const idNewRel = await db('rel').insert({
+                                prev_word_id: idWordReadPrev,
+                                word_id: vWordReadDb.id, 
+                                next_word_id: idWordReadNext
+                            });
                         } else {
                             process.stdout.write('.');
                             cntRead++;

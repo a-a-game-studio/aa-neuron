@@ -1,6 +1,6 @@
 
 /** Действия с ботом */
-enum WordCatT {
+export enum WordCatT {
     none = 0,
     entity= 1, // Сущьность - существительное
     action = 2, // Действие - глагол
@@ -10,7 +10,7 @@ enum WordCatT {
     adverb = 6 // Наречие
 }
 
-interface WordI {
+export interface WordI {
     id:number; // ID
 	word:string; // Текст слова
 	q:number; // Количество заданных вопросов системой по слову
@@ -20,7 +20,7 @@ interface WordI {
 	if_sinonim: boolean; // Синоним
 }
 
-class WordE {
+export class WordE {
 
     static NAME = 'word'
 }
