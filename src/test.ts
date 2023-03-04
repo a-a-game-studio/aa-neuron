@@ -12,8 +12,9 @@ import { db } from "./System/DBConnect";
 import { mWait } from './Helper/WaitH';
 import { mRandomInteger } from './Helper/NumberH';
 import { ReadSys } from './System/ReadSys';
-import { WordCatT, WordI } from './Infrastructure/SQL/Entity/WordE';
+import { WordCatT, WordI, WordE } from './Infrastructure/SQL/Entity/WordE';
 import { RelI } from './Infrastructure/SQL/Entity/RelE';
+
 
 let iCount = 0;
 const ixRelation:Record<number, number[]> = {}
@@ -694,7 +695,7 @@ async function fGenPhrase(asWord:string[], lenSearch:number){
 
     const ixWordFindRel:Record<number, number[]> = {};
     
-    let aidWordNextSearch:number[] = aWordQuery.map(el => el.id);
+    let aidWordNextSearch:number[] = [aWordQuery[0].id]
     let idWordSelect:number = 0;
     const aidWordPhrase:number[] = [];
     
@@ -790,6 +791,127 @@ async function fGenPhrase(asWord:string[], lenSearch:number){
     console.log('END')
 }
 
+async function fQuestionPhrase(sEntity:string, sQuestion:string){
+    
+
+    
+
+    const vWordEntity = await db('word').where('word', sEntity).first();
+    const vWordQuestion = await db('word').where('word', sQuestion).first();
+
+    if(!vWordEntity || !vWordQuestion){
+        return;
+    }
+    const aWordUnion = await db('word').where('cat', WordCatT.union).select();
+
+    // const ixWordQueryByWord = _.keyBy(aWordQuery, 'word');
+
+    let bFind = false;
+    let bFail = false;
+
+    // let aidWordNextSearch:number[] = [aWordQuery[0].id]
+    // do {
+    //     const dbQuery = db('rel').whereIn('word_id', aidWordNextSearch)
+    //     if(idWordSelect > 0){
+    //         dbQuery.where('prev_word_id', idWordSelect)
+    //     }
+
+        
+    // } while (!bFind && !bFail);
+
+
+    const aRelEntity:RelI[] = await db('rel').where('word_id', vWordEntity.id).select('prev_word_id','word_id', 'next_word_id');
+    const aRelQuestion:RelI[] = await db('rel').where('word_id', vWordEntity.id).select('prev_word_id','word_id', 'next_word_id');
+
+    const aRel:RelI[]  = await db('rel')
+        .where('prev_word_id', vWordEntity.id)
+        .where('word_id', vWordQuestion.id)
+        .select('prev_word_id','word_id', 'next_word_id');
+
+    const aidNextWord = aRel.map(el => el.next_word_id)
+
+    
+
+    for (let i = 0; i < aRel.length; i++) {
+        const vRelUnion = aRel[i];
+
+        
+        
+        const vWord = await db('word').whereIn('id', [vRelUnion.next_word_id]).first('word');
+
+        const aRelNext:any[] = await db({rel:'rel'})
+            .leftJoin({ w: WordE.NAME }, 'w.id', 'rel.next_word_id') // Подцепляем форумную таблицу топиков
+            .where('prev_word_id', vWordQuestion.id)
+            .where('word_id', vRelUnion.next_word_id)
+            .distinct('w.id')
+            .select('prev_word_id','word_id', 'next_word_id', 'w.word');
+
+        console.log('>>>',sEntity, sQuestion, vWord.word, aRelNext.map(el => el.word));
+    }
+
+        
+
+    // const aRelEntityNext:RelI[] = await db('rel').where('word_id', vWordEntity.id).select('prev_word_id','word_id', 'next_word_id');
+    // const aRelQuestionPrev:RelI[] = await db('rel').where('word_id', vWordEntity.id).select('prev_word_id','word_id', 'next_word_id');
+}
+
+async function fSuggestPhrase(sWord:string, sMatch?:string){
+    
+    const vWord = await db('word').where('word', sWord).first();
+
+    if(!vWord){
+        return;
+    }
+
+    // const ixWordQueryByWord = _.keyBy(aWordQuery, 'word');
+
+    let bFind = false;
+    let bFail = false;
+
+    // let aidWordNextSearch:number[] = [aWordQuery[0].id]
+    // do {
+    //     const dbQuery = db('rel').whereIn('word_id', aidWordNextSearch)
+    //     if(idWordSelect > 0){
+    //         dbQuery.where('prev_word_id', idWordSelect)
+    //     }
+
+        
+    // } while (!bFind && !bFail);
+
+
+    const aRel:RelI[] = await db('rel').where('word_id', vWord.id).select('prev_word_id','word_id', 'next_word_id');
+    const aidNextWord = aRel.map(el => el.next_word_id)
+    const aWordSuggest = await db('word').whereIn('id', aidNextWord).select('word');
+    let asWordMatch:string[] = [];
+    if(sMatch){
+        for (let i = 0; i < aWordSuggest.length; i++) {
+            const vWordSuggest = aWordSuggest[i];
+    
+            
+            if(vWordSuggest.word.indexOf(sMatch) == 0){
+                asWordMatch.push(vWordSuggest.word);
+            }
+            
+        }
+    } else {
+        asWordMatch = aWordSuggest.map(el => el.word);
+    }
+    
+    console.log('>>>', asWordMatch)
+
+    // for (let i = 0; i < aRel.length; i++) {
+    //     const vRelUnion = aRelUnion[i];
+    //     const aWordUnion = await db('word').whereIn('id', [vRelUnion.next_word_id, vRelUnion.prev_word_id, vRelUnion.word_id]).select();
+
+    //     console.log('>>>',aWordUnion);
+    // }
+
+        
+
+    // const aRelEntityNext:RelI[] = await db('rel').where('word_id', vWordEntity.id).select('prev_word_id','word_id', 'next_word_id');
+    // const aRelQuestionPrev:RelI[] = await db('rel').where('word_id', vWordEntity.id).select('prev_word_id','word_id', 'next_word_id');
+}
+
 
 async function run(){
 
@@ -813,10 +935,18 @@ async function run(){
 
     const vReadSys = new ReadSys();
     // await vReadSys.faReadLib(sRootDir + '/data/lib/hary_potter.txt')
+    // await vReadSys.faReadLib(sRootDir + '/data/lib/черное копье.txt')
 
-    await vReadSys.faReadDict(WordCatT.numeric)
+    
+    
 
-    // await fGenPhrase(['я'], 10);
+    // await vReadSys.faReadDict(WordCatT.numeric)
+
+    // await fGenPhrase(['учится'], 10);
+    // 
+    // await fSuggestPhrase('учился');
+    await fQuestionPhrase('учится', 'в');
+    
     
 
     // await faCategorization();

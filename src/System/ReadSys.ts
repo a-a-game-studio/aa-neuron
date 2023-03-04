@@ -13,6 +13,7 @@ export class ReadSys {
     public async faReadLib(sFile:string){
 
         const ixWord:Record<string, number> = {};
+        const ixWordCnt:Record<number, number> = {};
     
         const sText = await faReadFile(sFile);
     
@@ -103,6 +104,13 @@ export class ReadSys {
                             idWordReadPrev = -1;
                         }
                     }
+
+                    if(vWordReadDb){
+                        if(!ixWordCnt[vWordReadDb.id]){
+                            ixWordCnt[vWordReadDb.id] = 0;
+                        }
+                        ixWordCnt[vWordReadDb.id]++;
+                    }
     
                     if(vWordReadDb && vWordReadDb.cat > 0){
                         aiStructPhrasa.push(vWordReadDb.cat);
@@ -159,9 +167,6 @@ export class ReadSys {
             
         }
     
-        
-    
-    
         asTextNew = _.uniq(asTextNew);
     
         const aInsertWord = [];
@@ -182,6 +187,15 @@ export class ReadSys {
             console.log(aInsertWord.map(el => el.word));
             await db('word').insert(aInsertWord).onConflict().ignore();
         }
+
+        // console.log(ixWordCnt);
+        const aWord:{word_id:number, cnt:number}[] = [];
+        for (const idWord in ixWordCnt) {
+            // console.log(idWord,'-', Number(ixWordCnt[idWord]));
+            aWord.push({word_id:Number(idWord), cnt:Number(ixWordCnt[idWord])});
+            
+        }
+        await db('word_use').insert(aWord);
     }
 
 
