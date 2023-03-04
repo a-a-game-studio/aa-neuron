@@ -14,6 +14,8 @@ import { mRandomInteger } from './Helper/NumberH';
 import { ReadSys } from './System/ReadSys';
 import { WordCatT, WordI, WordE } from './Infrastructure/SQL/Entity/WordE';
 import { RelI } from './Infrastructure/SQL/Entity/RelE';
+import { ContextE } from './Infrastructure/SQL/Entity/ContextE';
+import { InfoSys } from './System/InfoSys';
 
 
 let iCount = 0;
@@ -945,8 +947,16 @@ async function run(){
     // await fGenPhrase(['учится'], 10);
     // 
     // await fSuggestPhrase('учился');
-    await fQuestionPhrase('учится', 'в');
-    
+    // await fQuestionPhrase('учится', 'в');
+
+    const infoSys = new InfoSys();
+
+    const asText = await db(ContextE.NAME).limit(10).offset(0).orderBy('id','asc').pluck('text');
+    for (let i = 0; i < asText.length; i++) {
+        const sText = asText[i];
+        await infoSys.fAnalize(sText)
+    }
+    // console.log(asText);
     
 
     // await faCategorization();

@@ -49,7 +49,7 @@ export class ReadSys {
                 
 
                 // Добавляем контекст
-                const sContext = (sTextSplit.match(/([а-яёa-z0-9,]{1,50})/gi) || []).join(' ').toLowerCase();
+                const sContext = (sTextSplit.match(/([а-яёa-z0-9,]{1,50})/gi) || []).join(' ');
                 const sContextHash = md5(sContext);
                 
 
