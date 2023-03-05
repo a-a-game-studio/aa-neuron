@@ -951,7 +951,7 @@ async function run(){
 
     const infoSys = new InfoSys();
 
-    const asText = await db(ContextE.NAME).limit(10).offset(0).orderBy('id','asc').pluck('text');
+    const asText = await db(ContextE.NAME).limit(1000).offset(10).orderBy('id','asc').pluck('text');
     for (let i = 0; i < asText.length; i++) {
         const sText = asText[i];
         await infoSys.fAnalize(sText)

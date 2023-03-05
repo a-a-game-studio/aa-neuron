@@ -24,15 +24,15 @@ import { db } from "./DBConnect";
 const asAlias = ['он', 'его', 'их', 'они', 'них']
 const ixAlias = _.keyBy(asAlias);
 
-const aEntityCtx:WordI[] = [];
+let aEntityCtx:WordI[] = [];
 
 export class InfoSys {
     prev_text:string;
 
     async fAnalize(sText:string){
-        console.log('========================================')
+        console.log('================================================================================')
         console.log(sText);
-        console.log('========================================')
+        console.log('================================================================================')
 
         sText = sText.split(',').join(' , ')
 
@@ -44,8 +44,7 @@ export class InfoSys {
 
         const aWordDB:WordI[] = await db(WordE.NAME).whereIn('word', asWordRead).select('id','word', 'cat');
         aWordDB.push(...aEntityCtx);
-        console.log('==find==',asWordRead);
-        console.log('==no_explain==', aWordDB.filter(el => el.cat == 0).map(el => el.word));
+        
         
 
         const ixWordDbWord = _.keyBy(aWordDB, 'word');
@@ -99,6 +98,9 @@ export class InfoSys {
                             }
                         }
                     }
+                } else {
+                    // console.log('==find==',asWordRead);
+                    console.log('==no_explain==', aWordDB.filter(el => el.cat == 0).map(el => el.word));
                 }
                 aEntity = [];
                 aVerb = [];
@@ -119,7 +121,7 @@ export class InfoSys {
 
                         aEntityTarget.push(ixWordDbWord[sWordRead]);
                         if(ixWordDbWord[sWordReadPrev]?.cat == WordCatT.preposition){
-                            console.log('--001-->',sWordReadPrev, sWordRead)
+                            // console.log('--001-->',sWordReadPrev, sWordRead)
                             ixPreposition[ixWordDbWord[sWordRead].id] = ixWordDbWord[sWordReadPrev];
                             
                         }
@@ -130,15 +132,22 @@ export class InfoSys {
                         for (let x = 0; x < aEntityTarget.length; x++) {
                             const vEntityTarget = aEntityTarget[x];
 
-                            console.log('--01-->',sWordReadPrev, sWordRead)
+                            // console.log('--01-->',sWordReadPrev, sWordRead)
                             ixWhere[vEntityTarget.id] = ixWordDbWord[sWordRead];
                         }
                     }
                 } else {
                     
                     if(!aEntity.length){
-                        aEntity.push(ixWordDbWord[sWordRead]);
-                        aEntityCtx.push(ixWordDbWord[sWordRead]);    
+
+                        if(ixWordDbWord[sWordReadPrev]?.cat == WordCatT.preposition){ // Описывает место/цель предложения
+                            aEntityTarget.push(ixWordDbWord[sWordRead]);
+                        } else {
+                            aEntityCtx = []; // Если самое первое слово новая сущьность
+                            aEntity.push(ixWordDbWord[sWordRead]);
+                            aEntityCtx.push(ixWordDbWord[sWordRead]);    
+                        }
+
                     } else if(aEntity.length && _.includes([',', 'и', 'или'], sWordReadPrev)){
                         aEntity.push(ixWordDbWord[sWordRead]);
                         aEntityCtx.push(ixWordDbWord[sWordRead]);    
@@ -146,7 +155,7 @@ export class InfoSys {
                         for (let x = 0; x < aEntity.length; x++) {
                             const vEntity = aEntity[x];
 
-                            console.log('--1-->',sWordReadPrev, sWordRead)
+                            // console.log('--1-->',sWordReadPrev, sWordRead)
                             ixWhere[vEntity.id] = ixWordDbWord[sWordRead];
                         }
                     }
@@ -162,6 +171,7 @@ export class InfoSys {
                 } else {
                     // console.log('---->',sWordReadPrev, sWordRead)
                     if(!aEntity.length){
+                        aEntityCtx = []; // Если самое первое слово новая сущьность
                         aEntity.push(ixWordDbWord[sWordRead]);
                         aEntityCtx.push(ixWordDbWord[sWordRead]);    
                     } else if(aEntity.length && _.includes([',', 'и', 'или'], sWordReadPrev)){
@@ -169,7 +179,7 @@ export class InfoSys {
                         aEntityCtx.push(ixWordDbWord[sWordRead]);    
                     } else if(aEntity.length && ixWordDbWord[sWordReadPrev]?.cat == WordCatT.entity){
                         for (let x = 0; x < aEntity.length; x++) {
-                            console.log('-2--->',aEntity.map(el => el.word), sWordRead)
+                            // console.log('-2--->',aEntity.map(el => el.word), sWordRead)
                             const vEntity = aEntity[x];
                             ixWhere[vEntity.id] = ixWordDbWord[sWordRead];
                         }
@@ -181,11 +191,11 @@ export class InfoSys {
             if(ixWordDbWord[sWordRead].cat == WordCatT.alias){
                 
                 if(aVerb.length || aProp.length){
-                    aEntityTarget.push(...aEntityCtx);
+                    // aEntityTarget.push(...aEntityCtx);
                 } else {
                     aEntity.push(...aEntityCtx);
                 }
-                console.log('-3--->',aEntity.map(el => el.word), sWordRead)
+                // console.log('-3--->',aEntity.map(el => el.word), sWordRead)
             }
 
             if(ixWordDbWord[sWordRead].cat == WordCatT.action){
@@ -227,6 +237,9 @@ export class InfoSys {
                     }
                 }
             }
+        } else {
+            // console.log('==find==',asWordRead);
+            console.log('==no_explain==', aWordDB.filter(el => el.cat == 0).map(el => el.word));
         }
 
         // console.log('>>>aInsertInfo>>>',aInsertInfo);
@@ -245,7 +258,9 @@ export class InfoSys {
             
         }
         
-
+        if(aInsertInfo.length){
+            await db('info').insert(aInsertInfo);
+        }
         // console.log('[entity:1]',ixWordDbByCat[1])
         // console.log('[verb:2]',ixWordDbByCat[2])
         // console.log('[prop:3]',ixWordDbByCat[3])
