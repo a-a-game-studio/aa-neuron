@@ -16,6 +16,7 @@ import { WordCatT, WordI, WordE } from './Infrastructure/SQL/Entity/WordE';
 import { RelI } from './Infrastructure/SQL/Entity/RelE';
 import { ContextE } from './Infrastructure/SQL/Entity/ContextE';
 import { InfoSys } from './System/InfoSys';
+import { MatchSys } from './System/MatchSys';
 
 
 let iCount = 0;
@@ -951,15 +952,22 @@ async function run(){
 
     const infoSys = new InfoSys();
 
-    const asText = await db(ContextE.NAME).limit(1000).offset(10).orderBy('id','asc').pluck('text');
-    for (let i = 0; i < asText.length; i++) {
-        const sText = asText[i];
-        await infoSys.fAnalize(sText)
-    }
+    // const asText = await db(ContextE.NAME).limit(1000).offset(10).orderBy('id','asc').pluck('text');
+    // for (let i = 0; i < asText.length; i++) {
+    //     const sText = asText[i];
+    //     await infoSys.fAnalize(sText)
+    // }
     // console.log(asText);
     
 
     // await faCategorization();
+
+    const matchSys = new MatchSys();
+    const asText = await db(ContextE.NAME).limit(10000).offset(0).orderBy('id','asc').pluck('text');
+    const sText = asText.join('. ');
+    // await matchSys.fAnalizeText(sText);
+
+    await matchSys.fMatchText('тапочки', 'all');
 
 
     // console.log('Индексация:' , ActionT.indexation)

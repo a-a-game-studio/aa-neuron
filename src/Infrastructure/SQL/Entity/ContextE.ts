@@ -6,6 +6,7 @@ export enum ContextT {
     web=2,
     img=3,
     dialog=4,
+    word = 5,
 }
 
 export interface ContextI {
