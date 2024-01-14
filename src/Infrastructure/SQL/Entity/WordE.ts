@@ -10,7 +10,8 @@ export enum WordCatT {
     adverb = 6, // Наречие
     union = 7, // Союзы
     numeric = 8, // числительное
-    name = 9 // имя/имя собственное
+    name = 9, // имя/имя собственное
+    partial = 10
 }
 
 export interface WordI {

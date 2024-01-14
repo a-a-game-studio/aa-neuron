@@ -47,6 +47,9 @@ function askQuestion(query:string) {
     }))
 }
 
+/** индексация через получения текста с web страницы
+ * а так-же структуризация текста
+ */
 async function faIndexation(sUrl:string){
     // let sHtml:string = (await axios.get(sUrl)).data
 
@@ -401,7 +404,9 @@ function  fFindStart(sText:string, asMatch:string[]): number{
     return iLeft;
 }
 
-
+/** 
+ * Получения синонима с веб страницы через сайт синоним
+ */
 async function fSearchSinonim_Synonim(vWordQuestion:{word:string,id:number}){
 
     const sTextPage = await fGetTextFromWeb('https://sinonim.org/s/'+vWordQuestion.word)
@@ -439,7 +444,11 @@ async function fSearchSinonim_Synonim(vWordQuestion:{word:string,id:number}){
     return _.uniq(asSinonim).slice(0,5)
 
 }
-
+/**
+ * Поиск синонимов и их запись в БД
+ * Предполагается что можно в дальнейшем на основе уже известной фразы использовать синонимичность, 
+ * в том числе для лучшего понимания и генерации текста
+ */
 async function faSynonimization(){
     const aWordQuestion = await db('word').where('if_sinonim', '=', 0).select().orderBy('q','desc').limit(10);
 
@@ -486,8 +495,14 @@ async function faSynonimization(){
     }
 }
 
+/**
+ * Обращается на сайт морфологии по тем словам по которым не знает что это за часть речи
+ * Записывает эти данные в БД
+ * Предполага что на основе структуры фразы таблица - phrase_struct 
+ * и частей речи, можно будет делать законченные часто распространненные по длинне и содеражнию фразы
+ */
 async function faCategorization(){
-    const aWordQuestion = await db('word').where('cat', '=', 0).select().orderBy('q','asc').limit(100);
+    const aWordQuestion = await db('word').where('cat', '=', 0).select().orderBy('q','asc').limit(10000);
 
 
     for (let i = 0; i < aWordQuestion.length; i++) {
@@ -689,6 +704,12 @@ const aConfDict = [
     'https://dictants.com/6-klass/itogovye-diktanty-za-6-klass/',
 ]
 
+/** 
+ * Генератор фразы на основе слова
+ * Сейчас работает по слову
+ * предполагается что в дальнейшем можно буде сделать генерацию на основе нескольких ключевых слов
+ * а так - же их последовательности
+ */
 async function fGenPhrase(asWord:string[], lenSearch:number){
     const aWordQuery = await db('word').whereIn('word', asWord).select();
 
@@ -794,6 +815,13 @@ async function fGenPhrase(asWord:string[], lenSearch:number){
     console.log('END')
 }
 
+/** Позволяет по части вопроса например  
+ * "учится в" "жаркое лето" 
+ * ответить на вопросы из известного
+ * где можно учиться - "учится в хогвартсе" "учится в школе" "учится в классе"
+ * где жаркое лето - "жаркое лето англии" "жаркое лето исландии"
+ * и список слов которыми можно продолжить фразу
+ */
 async function fQuestionPhrase(sEntity:string, sQuestion:string){
     
 
@@ -858,6 +886,10 @@ async function fQuestionPhrase(sEntity:string, sQuestion:string){
     // const aRelQuestionPrev:RelI[] = await db('rel').where('word_id', vWordEntity.id).select('prev_word_id','word_id', 'next_word_id');
 }
 
+/** 
+ * Выдать связанные слова по завершению речи слова
+ * match  фильтрует слова из выборки
+ * */
 async function fSuggestPhrase(sWord:string, sMatch?:string){
     
     const vWord = await db('word').where('word', sWord).first();
@@ -945,7 +977,7 @@ async function run(){
 
     // await vReadSys.faReadDict(WordCatT.numeric)
 
-    // await fGenPhrase(['учится'], 10);
+    // await fGenPhrase(['кошка'], 10);
     // 
     // await fSuggestPhrase('учился');
     // await fQuestionPhrase('учится', 'в');
@@ -967,7 +999,7 @@ async function run(){
     const sText = asText.join('. ');
     // await matchSys.fAnalizeText(sText);
 
-    await matchSys.fMatchText('тапочки', 'all');
+    await matchSys.fMatchText('соа', 'all');
 
 
     // console.log('Индексация:' , ActionT.indexation)
